@@ -1,48 +1,94 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
 :root {
-  --background: #0d1117;
-  --surface: #161b22;
-  --surface-alt: #21262d;
-  --border: #30363d;
-  --foreground: #c9d1d9;
-  --muted: #8b949e;
-  --primary: #2f81f7;
-  --accent: #79c0ff;
-  --danger: #f85149;
-}
-
-* {
-  border-color: var(--border);
-}
-
-html,
-body {
-  min-height: 100%;
-}
-
-html {
   color-scheme: dark;
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --card: #161b22;
+  --card-foreground: #e6edf3;
+  --popover: #0d1117;
+  --popover-foreground: #e6edf3;
+  --primary: #1f6feb;
+  --primary-foreground: #ffffff;
+  --secondary: #21262d;
+  --secondary-foreground: #e6edf3;
+  --muted: #21262d;
+  --muted-foreground: #8b949e;
+  --accent: #1f6feb;
+  --accent-foreground: #ffffff;
+  --destructive: #da3633;
+  --border: #30363d;
+  --input: #30363d;
+  --ring: #58a6ff;
+  --radius: 0.75rem;
 }
 
-body {
-  background:
-    radial-gradient(circle at 20% 0%, rgba(47, 129, 247, 0.28), transparent 45%),
-    radial-gradient(circle at 80% 20%, rgba(121, 192, 255, 0.16), transparent 40%),
-    linear-gradient(180deg, #0d1117 0%, #0a0f16 100%);
-  color: var(--foreground);
-  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+@theme inline {
+  --font-heading: var(--font-space-grotesk);
+  --font-sans: var(--font-space-grotesk);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.8);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) * 1.2);
+  --radius-xl: calc(var(--radius) * 1.5);
 }
 
-code,
-pre,
-.font-mono {
-  font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html,
+  body {
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-family: var(--font-space-grotesk), "Segoe UI", sans-serif;
+  }
+
+  a {
+    color: inherit;
+  }
 }
 
-a {
-  color: inherit;
+.surface {
+  border: 1px solid #30363d;
+  background: linear-gradient(180deg, rgba(22, 27, 34, 0.9), rgba(13, 17, 23, 0.95));
+}
+
+.soft-grid {
+  background-image:
+    linear-gradient(to right, rgba(56, 139, 253, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(56, 139, 253, 0.08) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+.muted {
+  color: #8b949e;
+}
+
+.mono {
+  font-family: var(--font-ibm-plex-mono), "SFMono-Regular", Menlo, monospace;
 }

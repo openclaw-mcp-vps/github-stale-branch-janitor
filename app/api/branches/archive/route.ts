@@ -1,59 +1,43 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getAuthSession } from "@/lib/auth";
-import { addArchiveLog } from "@/lib/database";
-import { archiveBranch } from "@/lib/github";
-import { hasPaidAccess } from "@/lib/paywall";
+import { archiveBranches, getGitHubTokenFromCookies } from "@/lib/github";
+import { getAccessSession } from "@/lib/paywall";
 
-export const runtime = "nodejs";
-
-const payloadSchema = z.object({
-  repoFullName: z.string().min(3),
-  branchName: z.string().min(1)
+const bodySchema = z.object({
+  repo: z.string().min(3),
+  branches: z.array(z.string().min(1)).min(1),
 });
 
 export async function POST(request: Request) {
-  const session = await getAuthSession();
-  if (!session?.accessToken || !session.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const access = await getAccessSession();
+  if (!access) {
+    return NextResponse.json({ error: "Paid access required" }, { status: 402 });
   }
 
-  const cookieStore = await cookies();
-  if (!hasPaidAccess(cookieStore)) {
-    return NextResponse.json({ error: "Payment required" }, { status: 402 });
+  const token = await getGitHubTokenFromCookies();
+  if (!token) {
+    return NextResponse.json({ error: "GitHub connection required" }, { status: 401 });
   }
 
-  let payload: z.infer<typeof payloadSchema>;
+  const json = await request.json().catch(() => null);
+  const parsed = bodySchema.safeParse(json);
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
 
   try {
-    payload = payloadSchema.parse(await request.json());
-  } catch {
-    return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
-  }
+    const results = await archiveBranches(token, parsed.data.repo, parsed.data.branches);
+    const archived = results.filter((result) => result.status === "archived").length;
 
-  try {
-    const archived = await archiveBranch({
-      accessToken: session.accessToken,
-      repoFullName: payload.repoFullName,
-      branchName: payload.branchName
+    return NextResponse.json({
+      repo: parsed.data.repo,
+      archived,
+      results,
     });
-
-    await addArchiveLog({
-      userId: session.user.id,
-      repoFullName: payload.repoFullName,
-      originalBranch: payload.branchName,
-      archivedBranch: archived.archivedBranch
-    });
-
-    return NextResponse.json({ archivedBranch: archived.archivedBranch });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to archive branch"
-      },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Unable to archive branches";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

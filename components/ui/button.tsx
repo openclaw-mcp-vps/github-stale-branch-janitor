@@ -4,42 +4,38 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2f81f7] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0d1117] disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#58a6ff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0d1117] disabled:cursor-not-allowed disabled:opacity-60",
   {
     variants: {
       variant: {
-        default: "bg-[#2f81f7] text-white hover:bg-[#1f6feb]",
-        secondary: "bg-[#21262d] text-[#c9d1d9] hover:bg-[#30363d]",
-        outline: "border border-[#30363d] bg-transparent text-[#c9d1d9] hover:bg-[#161b22]",
-        ghost: "text-[#8b949e] hover:bg-[#161b22] hover:text-[#c9d1d9]"
+        default: "bg-[#1f6feb] text-white hover:bg-[#388bfd]",
+        secondary: "border border-[#30363d] bg-[#161b22] text-[#c9d1d9] hover:border-[#58a6ff]",
+        outline: "border border-[#30363d] bg-transparent text-[#c9d1d9] hover:border-[#58a6ff]",
+        ghost: "text-[#c9d1d9] hover:bg-[#21262d]",
+        destructive: "bg-[#da3633] text-white hover:bg-[#f85149]",
       },
       size: {
         default: "h-10 px-4 py-2",
-        sm: "h-8 rounded-lg px-3 text-xs",
-        lg: "h-11 rounded-xl px-8",
-        icon: "h-10 w-10"
-      }
+        sm: "h-8 rounded-md px-3 text-xs",
+        lg: "h-11 px-5",
+      },
     },
     defaultVariants: {
       variant: "default",
-      size: "default"
-    }
-  }
+      size: "default",
+    },
+  },
 );
 
-function Button({
-  className,
-  variant,
-  size,
-  asChild = false,
-  ...props
-}: React.ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean;
-  }) {
-  const Comp = asChild ? "span" : "button";
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {}
 
-  return <Comp className={cn(buttonVariants({ variant, size, className }))} {...props} />;
-}
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, type = "button", ...props }, ref) => {
+    return <button type={type} className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
+  },
+);
+Button.displayName = "Button";
 
 export { Button, buttonVariants };

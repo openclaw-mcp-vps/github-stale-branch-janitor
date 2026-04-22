@@ -1,203 +1,189 @@
 import Link from "next/link";
-import { ArrowRight, Clock3, GitBranch, Shield, Sparkles, Trash2 } from "lucide-react";
+import { ArrowRight, CalendarClock, CheckCircle2, FolderGit2, ShieldCheck, Timer } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-const faqs = [
-  {
-    question: "Will this delete active feature branches?",
-    answer:
-      "No. Every branch candidate is shown with the last commit author and date before any action. You can archive one-by-one or set conservative thresholds first."
-  },
-  {
-    question: "What does archive mean in this tool?",
-    answer:
-      "The tool preserves commit history by moving stale branches under an archive/ namespace and then removing the original branch ref. Nothing is squashed or rewritten."
-  },
-  {
-    question: "How does scheduled cleanup work?",
-    answer:
-      "You save a per-repository policy (threshold + frequency). Your cron endpoint runs scans on that cadence and publishes fresh recommendations in the dashboard."
-  },
-  {
-    question: "Can I use this across multiple organizations?",
-    answer:
-      "Yes. GitHub OAuth scopes include repositories you can access, so private repos and organization repos appear in one unified selector."
-  }
+const painPoints = [
+  "Branches pile up after every feature flag experiment, hotfix, and release train.",
+  "Teams lose confidence in what can be safely deleted, so everything gets left behind.",
+  "Reviewing stale branches by hand burns engineering hours and still misses edge cases.",
 ];
 
-const checkoutLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK;
+const outcomes = [
+  {
+    icon: FolderGit2,
+    title: "Real stale-branch inventory",
+    description:
+      "Scan any connected repository and get stale branches ranked by age, with commit author and date attached.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Safer archiving workflow",
+    description:
+      "Archive branch references under an archive namespace before deleting originals, so cleanup is auditable.",
+  },
+  {
+    icon: CalendarClock,
+    title: "Recurring branch hygiene",
+    description:
+      "Set daily or weekly cleanup schedules so stale branches stop growing between sprint cycles.",
+  },
+];
+
+const faq = [
+  {
+    question: "What does “archive” do in GitHub Stale Branch Janitor?",
+    answer:
+      "The tool copies each selected branch into an archive namespace and then removes the original branch name. You retain a recoverable branch reference while keeping your primary branch list clean.",
+  },
+  {
+    question: "Can this run automatically without manual scans?",
+    answer:
+      "Yes. You can save a cleanup schedule per repository with a staleness threshold. A scheduled run endpoint can be triggered by cron so cleanup stays consistent.",
+  },
+  {
+    question: "How is access controlled after payment?",
+    answer:
+      "After checkout, your purchase email is validated against Stripe webhook records. Once confirmed, a secure access cookie unlocks the dashboard.",
+  },
+  {
+    question: "Will protected or default branches be archived?",
+    answer:
+      "No. The API explicitly skips default branches and protected branches to avoid destructive changes to active workflows.",
+  },
+];
 
 export default function HomePage() {
+  const paymentLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ?? "";
+
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-20 px-6 pb-20 pt-10 md:px-10">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <Link href="/" className="text-sm font-semibold tracking-wide text-[#79c0ff]">
-          GitHub Stale Branch Janitor
-        </Link>
-        <div className="flex flex-wrap gap-2">
-          <a
-            href="/api/auth/github"
-            className="inline-flex h-10 items-center rounded-xl border border-[#30363d] bg-[#161b22] px-4 text-sm text-[#c9d1d9] hover:bg-[#21262d]"
-          >
-            Connect GitHub
-          </a>
-          <Link
-            href="/dashboard"
-            className="inline-flex h-10 items-center rounded-xl bg-[#2f81f7] px-4 text-sm font-medium text-white hover:bg-[#1f6feb]"
-          >
-            Open Dashboard
-          </Link>
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-20 px-6 py-12 md:px-10">
+      <header className="surface overflow-hidden rounded-2xl border p-8 shadow-[0_0_0_1px_rgba(56,139,253,0.12)] md:p-12">
+        <div className="grid gap-8 md:grid-cols-[1.25fr_0.75fr] md:items-end">
+          <div className="space-y-6">
+            <p className="mono inline-flex items-center gap-2 rounded-full border border-[#1f6feb]/40 bg-[#1f6feb]/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-[#7fb3ff]">
+              Dev Tools • GitHub Hygiene
+            </p>
+            <h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-[#f0f6fc] md:text-6xl">
+              Find and archive stale GitHub branches older than N days.
+            </h1>
+            <p className="max-w-2xl text-lg leading-relaxed text-[#9ba7b4]">
+              Keep repositories clean without manual branch hunting. Connect GitHub, set your threshold, review stale branches,
+              and archive in one click.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <a
+                href={paymentLink}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#238636] px-6 py-3 font-semibold text-white transition hover:bg-[#2ea043]"
+              >
+                Start Branch Cleanup for $9/mo
+                <ArrowRight className="h-4 w-4" />
+              </a>
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center justify-center rounded-xl border border-[#30363d] bg-[#161b22] px-6 py-3 font-semibold text-[#c9d1d9] transition hover:border-[#58a6ff]"
+              >
+                Open Dashboard
+              </Link>
+            </div>
+          </div>
+          <div className="surface rounded-xl p-6">
+            <p className="mono text-xs uppercase tracking-[0.16em] text-[#8b949e]">Why teams buy</p>
+            <ul className="mt-4 space-y-4 text-sm text-[#c9d1d9]">
+              <li className="flex items-start gap-3">
+                <Timer className="mt-0.5 h-4 w-4 text-[#58a6ff]" />
+                Avoid recurring cleanup chores across active repos.
+              </li>
+              <li className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-[#58a6ff]" />
+                Understand stale branches with author/date context before archiving.
+              </li>
+              <li className="flex items-start gap-3">
+                <CalendarClock className="mt-0.5 h-4 w-4 text-[#58a6ff]" />
+                Turn branch hygiene into a scheduled maintenance task.
+              </li>
+            </ul>
+          </div>
         </div>
       </header>
 
-      <section className="grid items-center gap-10 lg:grid-cols-[1.2fr_1fr]">
-        <div className="space-y-6">
-          <Badge className="bg-[#13233b] text-[#79c0ff]">Dev-tools • $9/month per workspace</Badge>
-          <h1 className="text-balance text-4xl font-semibold leading-tight text-white md:text-6xl">
-            Find and archive stale GitHub branches before they become repo debt.
-          </h1>
-          <p className="max-w-2xl text-lg text-[#8b949e]">
-            Engineering teams accumulate hundreds of dead refs. This janitor scans every repository, exposes stale branches with owner/date context, and lets you archive safely with one click.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {checkoutLink ? (
-              <a href={checkoutLink} className="inline-flex h-11 items-center rounded-xl bg-[#2f81f7] px-6 font-medium text-white hover:bg-[#1f6feb]">
-                Buy Access
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </a>
-            ) : (
-              <span className="inline-flex h-11 items-center rounded-xl bg-[#21262d] px-6 text-sm text-[#8b949e]">
-                Set NEXT_PUBLIC_STRIPE_PAYMENT_LINK to enable checkout
-              </span>
-            )}
-            <a
-              href="/api/auth/github"
-              className="inline-flex h-11 items-center rounded-xl border border-[#30363d] px-6 font-medium text-[#c9d1d9] hover:bg-[#161b22]"
-            >
-              Connect GitHub
-            </a>
-          </div>
-        </div>
-
-        <Card className="bg-[#101721]/90">
-          <CardHeader>
-            <CardTitle>What you get</CardTitle>
-            <CardDescription>Purpose-built for teams shipping quickly across many repos.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-[#c9d1d9]">
-            <p className="flex items-start gap-2">
-              <GitBranch className="mt-0.5 h-4 w-4 text-[#79c0ff]" />
-              Org-wide repository selector with stale branch detection by commit age.
-            </p>
-            <p className="flex items-start gap-2">
-              <Clock3 className="mt-0.5 h-4 w-4 text-[#79c0ff]" />
-              Adjustable threshold in days to match your branch policy per repo.
-            </p>
-            <p className="flex items-start gap-2">
-              <Shield className="mt-0.5 h-4 w-4 text-[#79c0ff]" />
-              Archive action preserves branch history under `archive/*` refs.
-            </p>
-            <p className="flex items-start gap-2">
-              <Sparkles className="mt-0.5 h-4 w-4 text-[#79c0ff]" />
-              Scheduled cleanup recommendations that show up directly in dashboard.
-            </p>
-          </CardContent>
-        </Card>
+      <section className="grid gap-6 md:grid-cols-3">
+        {painPoints.map((point) => (
+          <Card key={point}>
+            <CardHeader>
+              <CardTitle className="text-lg">The branch sprawl problem</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <p className="text-sm leading-relaxed text-[#9ba7b4]">{point}</p>
+            </CardContent>
+          </Card>
+        ))}
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">The Problem</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-[#8b949e]">
-            Active repositories create stale branches faster than humans can clean them. The clutter slows branch navigation and increases accidental merges.
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">The Solution</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-[#8b949e]">
-            Scan once or run on schedule, identify branches older than policy, inspect author/date context, then archive safely in seconds.
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">Why Teams Pay</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-[#8b949e]">
-            A clean branch list is operational hygiene. Teams pay because manual branch hunting never happens when release pressure is high.
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Pricing</CardTitle>
-            <CardDescription>Simple hosted checkout. No seats, no usage tiers, no implementation overhead.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-5xl font-semibold text-white">
-              $9<span className="text-lg text-[#8b949e]">/month</span>
-            </p>
-            <p className="max-w-2xl text-sm text-[#8b949e]">
-              Includes GitHub OAuth, stale branch scans, commit metadata, one-click archive actions, and recurring cleanup scheduling.
-            </p>
-            {checkoutLink ? (
-              <a href={checkoutLink} className="inline-flex h-11 items-center rounded-xl bg-[#2f81f7] px-6 font-medium text-white hover:bg-[#1f6feb]">
-                Start Cleanup Now
-              </a>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Immediate ROI</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-[#c9d1d9]">
-            <p className="flex items-center gap-2">
-              <Trash2 className="h-4 w-4 text-[#79c0ff]" />
-              Remove dead branches before they pollute repo navigation.
-            </p>
-            <p className="flex items-center gap-2">
-              <Trash2 className="h-4 w-4 text-[#79c0ff]" />
-              Keep pull request targeting cleaner for busy teams.
-            </p>
-            <p className="flex items-center gap-2">
-              <Trash2 className="h-4 w-4 text-[#79c0ff]" />
-              Enforce branch hygiene without adding manual process.
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-3xl font-semibold text-white">FAQ</h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          {faqs.map((faq) => (
-            <Card key={faq.question}>
+      <section className="space-y-6">
+        <h2 className="text-3xl font-semibold tracking-tight text-[#f0f6fc] md:text-4xl">Purpose-built solution</h2>
+        <div className="grid gap-5 md:grid-cols-3">
+          {outcomes.map(({ icon: Icon, title, description }) => (
+            <Card key={title}>
               <CardHeader>
-                <CardTitle className="text-base">{faq.question}</CardTitle>
+                <Icon className="h-5 w-5 text-[#58a6ff]" />
+                <CardTitle className="mt-2 text-xl">{title}</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-[#8b949e]">{faq.answer}</CardContent>
+              <CardContent className="pt-0">
+                <p className="text-sm leading-relaxed text-[#9ba7b4]">{description}</p>
+              </CardContent>
             </Card>
           ))}
         </div>
       </section>
 
-      <footer className="flex flex-col items-start justify-between gap-3 border-t border-[#21262d] pt-8 text-sm text-[#6e7681] md:flex-row md:items-center">
-        <p>Built for engineering teams that care about clean repositories and fewer branch mistakes.</p>
-        <Link href="/dashboard" className="text-[#79c0ff] hover:text-[#a5d6ff]">
-          Go to dashboard
-        </Link>
-      </footer>
+      <section className="surface rounded-2xl border p-8 md:p-10">
+        <h2 className="text-3xl font-semibold tracking-tight text-[#f0f6fc]">Simple pricing for engineering teams</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[#9ba7b4]">
+          One plan. Full access to GitHub stale-branch scanning, archive actions, and scheduled cleanup jobs.
+        </p>
+        <div className="mt-8 grid gap-6 md:grid-cols-[1fr_auto] md:items-end">
+          <div>
+            <p className="mono text-xs uppercase tracking-[0.14em] text-[#8b949e]">Plan</p>
+            <p className="mt-2 text-5xl font-semibold text-[#f0f6fc]">$9<span className="text-lg text-[#8b949e]">/month</span></p>
+            <ul className="mt-4 space-y-2 text-sm text-[#c9d1d9]">
+              <li>Unlimited repository scans</li>
+              <li>Branch author/date visibility before action</li>
+              <li>Daily or weekly cleanup scheduling</li>
+              <li>Cookie-based access after payment verification</li>
+            </ul>
+          </div>
+          <a
+            href={paymentLink}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-xl bg-[#238636] px-6 py-3 font-semibold text-white transition hover:bg-[#2ea043]"
+          >
+            Buy Now on Stripe
+          </a>
+        </div>
+      </section>
+
+      <section className="space-y-4 pb-14">
+        <h2 className="text-3xl font-semibold tracking-tight text-[#f0f6fc]">FAQ</h2>
+        <div className="grid gap-4">
+          {faq.map((item) => (
+            <article key={item.question} className="surface rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-[#f0f6fc]">{item.question}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[#9ba7b4]">{item.answer}</p>
+            </article>
+          ))}
+        </div>
+        <p className="pt-2 text-sm text-[#8b949e]">
+          Already purchased? Visit{" "}
+          <Link href="/purchase/success" className="text-[#58a6ff] underline underline-offset-4">
+            purchase access
+          </Link>{" "}
+          to unlock your dashboard.
+        </p>
+      </section>
     </main>
   );
 }

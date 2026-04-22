@@ -1,51 +1,45 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getAuthSession } from "@/lib/auth";
-import { fetchStaleBranches } from "@/lib/github";
-import { hasPaidAccess } from "@/lib/paywall";
+import { findStaleBranches, getGitHubTokenFromCookies } from "@/lib/github";
+import { getAccessSession } from "@/lib/paywall";
 
-export const runtime = "nodejs";
-
-const payloadSchema = z.object({
-  repoFullName: z.string().min(3),
-  thresholdDays: z.number().int().min(1).max(3650)
+const querySchema = z.object({
+  repo: z.string().min(3),
+  days: z.coerce.number().int().min(1).max(3650),
 });
 
-export async function POST(request: Request) {
-  const session = await getAuthSession();
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(request: Request) {
+  const access = await getAccessSession();
+  if (!access) {
+    return NextResponse.json({ error: "Paid access required" }, { status: 402 });
   }
 
-  const cookieStore = await cookies();
-  if (!hasPaidAccess(cookieStore)) {
-    return NextResponse.json({ error: "Payment required" }, { status: 402 });
+  const token = await getGitHubTokenFromCookies();
+  if (!token) {
+    return NextResponse.json({ error: "GitHub connection required" }, { status: 401 });
   }
 
-  let payload: z.infer<typeof payloadSchema>;
+  const url = new URL(request.url);
+  const parsed = querySchema.safeParse({
+    repo: url.searchParams.get("repo"),
+    days: url.searchParams.get("days") ?? "90",
+  });
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid query parameters" }, { status: 400 });
+  }
 
   try {
-    payload = payloadSchema.parse(await request.json());
-  } catch {
-    return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
-  }
-
-  try {
-    const branches = await fetchStaleBranches({
-      accessToken: session.accessToken,
-      repoFullName: payload.repoFullName,
-      thresholdDays: payload.thresholdDays
+    const branches = await findStaleBranches(token, parsed.data.repo, parsed.data.days);
+    return NextResponse.json({
+      repo: parsed.data.repo,
+      thresholdDays: parsed.data.days,
+      count: branches.length,
+      branches,
     });
-
-    return NextResponse.json({ branches });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to scan stale branches"
-      },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Unable to scan branches";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

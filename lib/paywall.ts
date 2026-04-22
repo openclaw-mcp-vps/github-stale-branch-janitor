@@ -1,27 +1,17 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { type NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 
-export const PAYWALL_COOKIE_NAME = "sbj_access";
+import { signPayload, verifySignedPayload } from "@/lib/crypto";
 
-type CookieStoreLike = {
-  get: (name: string) => { value: string } | undefined;
-};
+const ACCESS_COOKIE_NAME = "gbj_access";
+const ACCESS_TTL_DAYS = 365;
 
 type AccessPayload = {
   email: string;
-  grantedAt: string;
+  exp: number;
 };
 
-function getCookieSecret() {
-  return (
-    process.env.PAYWALL_COOKIE_SECRET ??
-    process.env.NEXTAUTH_SECRET ??
-    process.env.STRIPE_WEBHOOK_SECRET ??
-    "unsafe-dev-secret-change-me"
-  );
-}
-
-function base64UrlEncode(value: string) {
+function toBase64Url(value: string): string {
   return Buffer.from(value, "utf8")
     .toString("base64")
     .replace(/\+/g, "-")
@@ -29,63 +19,94 @@ function base64UrlEncode(value: string) {
     .replace(/=+$/g, "");
 }
 
-function base64UrlDecode(value: string) {
+function fromBase64Url(value: string): string {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padLength = (4 - (normalized.length % 4)) % 4;
-  return Buffer.from(normalized + "=".repeat(padLength), "base64").toString("utf8");
+  const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+  return Buffer.from(normalized + padding, "base64").toString("utf8");
 }
 
-function sign(rawPayload: string) {
-  return createHmac("sha256", getCookieSecret()).update(rawPayload).digest("base64url");
-}
-
-export function createAccessCookieToken(email: string) {
-  const payload: AccessPayload = {
-    email: email.trim().toLowerCase(),
-    grantedAt: new Date().toISOString()
-  };
-
-  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-  const signature = sign(encodedPayload);
-
+function buildAccessToken(payload: AccessPayload): string {
+  const payloadString = JSON.stringify(payload);
+  const encodedPayload = toBase64Url(payloadString);
+  const signature = signPayload(encodedPayload, "PAYWALL_COOKIE_SECRET");
   return `${encodedPayload}.${signature}`;
 }
 
-export function readAccessCookieToken(token: string | undefined) {
-  if (!token) return null;
+function parseAccessToken(token: string): AccessPayload | null {
   const [encodedPayload, signature] = token.split(".");
-  if (!encodedPayload || !signature) return null;
+  if (!encodedPayload || !signature) {
+    return null;
+  }
 
-  const expectedSignature = sign(encodedPayload);
-  const providedBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expectedSignature);
-
-  if (providedBuffer.length !== expectedBuffer.length) return null;
-
-  if (!timingSafeEqual(providedBuffer, expectedBuffer)) {
+  if (!verifySignedPayload(encodedPayload, signature, "PAYWALL_COOKIE_SECRET")) {
     return null;
   }
 
   try {
-    const payload = JSON.parse(base64UrlDecode(encodedPayload)) as AccessPayload;
-    if (!payload.email || !payload.grantedAt) return null;
+    const rawPayload = fromBase64Url(encodedPayload);
+    const payload = JSON.parse(rawPayload) as AccessPayload;
+
+    if (!payload.email || typeof payload.exp !== "number") {
+      return null;
+    }
+
     return payload;
   } catch {
     return null;
   }
 }
 
-export function hasPaidAccess(cookieStore: CookieStoreLike) {
-  const token = cookieStore.get(PAYWALL_COOKIE_NAME)?.value;
-  return Boolean(readAccessCookieToken(token));
+export async function getAccessSession(): Promise<AccessPayload | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(ACCESS_COOKIE_NAME)?.value;
+  if (!token) {
+    return null;
+  }
+
+  const payload = parseAccessToken(token);
+  if (!payload) {
+    return null;
+  }
+
+  if (payload.exp < Date.now()) {
+    return null;
+  }
+
+  return payload;
 }
 
-export function setPaidAccessCookie(response: NextResponse, email: string) {
-  response.cookies.set(PAYWALL_COOKIE_NAME, createAccessCookieToken(email), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-    path: "/"
+export function setAccessCookie(response: NextResponse, email: string): NextResponse {
+  const exp = Date.now() + ACCESS_TTL_DAYS * 24 * 60 * 60 * 1000;
+  const token = buildAccessToken({
+    email: email.trim().toLowerCase(),
+    exp,
   });
+
+  response.cookies.set({
+    name: ACCESS_COOKIE_NAME,
+    value: token,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: ACCESS_TTL_DAYS * 24 * 60 * 60,
+  });
+
+  return response;
 }
+
+export function clearAccessCookie(response: NextResponse): NextResponse {
+  response.cookies.set({
+    name: ACCESS_COOKIE_NAME,
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
+
+  return response;
+}
+
+export const paywallCookieName = ACCESS_COOKIE_NAME;

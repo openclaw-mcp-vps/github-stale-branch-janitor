@@ -1,35 +1,33 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { hasEntitlement } from "@/lib/database";
-import { setPaidAccessCookie } from "@/lib/paywall";
+import { hasPaidCustomer } from "@/lib/db";
+import { setAccessCookie } from "@/lib/paywall";
 
-export const runtime = "nodejs";
-
-const payloadSchema = z.object({
-  email: z.string().email()
+const claimSchema = z.object({
+  email: z.string().email(),
 });
 
 export async function POST(request: Request) {
-  let payload: z.infer<typeof payloadSchema>;
+  const json = await request.json().catch(() => null);
+  const parsed = claimSchema.safeParse(json);
 
-  try {
-    payload = payloadSchema.parse(await request.json());
-  } catch {
-    return NextResponse.json({ error: "A valid purchase email is required." }, { status: 400 });
+  if (!parsed.success) {
+    return NextResponse.json({ error: "A valid purchase email is required" }, { status: 400 });
   }
 
-  const entitled = await hasEntitlement(payload.email);
-  if (!entitled) {
+  const isPaid = await hasPaidCustomer(parsed.data.email);
+
+  if (!isPaid) {
     return NextResponse.json(
       {
-        error: "No completed checkout was found for that email yet. If you just paid, wait a few seconds and try again."
+        error:
+          "No paid subscription found for that email yet. If you just purchased, wait a minute for Stripe webhook delivery and try again.",
       },
-      { status: 404 }
+      { status: 403 },
     );
   }
 
-  const response = NextResponse.json({ ok: true });
-  setPaidAccessCookie(response, payload.email);
-  return response;
+  const response = NextResponse.json({ success: true });
+  return setAccessCookie(response, parsed.data.email);
 }

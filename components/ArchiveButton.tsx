@@ -2,54 +2,56 @@
 
 import { useState } from "react";
 
+import { Archive } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 
 type ArchiveButtonProps = {
+  repo: string;
   branchName: string;
-  repoFullName: string;
-  onArchived: (archivedBranch: string) => void;
+  onArchived: (branchName: string) => void;
 };
 
-export function ArchiveButton({ branchName, repoFullName, onArchived }: ArchiveButtonProps) {
-  const [isArchiving, setIsArchiving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function ArchiveButton({ repo, branchName, onArchived }: ArchiveButtonProps) {
+  const [loading, setLoading] = useState(false);
 
   async function handleArchive() {
-    setIsArchiving(true);
-    setError(null);
+    setLoading(true);
 
     try {
       const response = await fetch("/api/branches/archive", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          repoFullName,
-          branchName
-        })
+          repo,
+          branches: [branchName],
+        }),
       });
 
-      const payload = (await response.json()) as { error?: string; archivedBranch?: string };
-
-      if (!response.ok || !payload.archivedBranch) {
-        throw new Error(payload.error ?? "Archiving failed.");
+      if (!response.ok) {
+        throw new Error("Unable to archive branch");
       }
 
-      onArchived(payload.archivedBranch);
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Archiving failed.");
+      const payload = (await response.json()) as {
+        results: Array<{ branch: string; status: string }>;
+      };
+
+      if (payload.results.some((result) => result.branch === branchName && result.status === "archived")) {
+        onArchived(branchName);
+      }
+    } catch {
+      // The parent list displays batch/status messaging, so this action stays intentionally quiet.
     } finally {
-      setIsArchiving(false);
+      setLoading(false);
     }
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <Button variant="secondary" size="sm" onClick={handleArchive} disabled={isArchiving}>
-        {isArchiving ? "Archiving..." : "Archive"}
-      </Button>
-      {error ? <p className="text-xs text-[#f85149]">{error}</p> : null}
-    </div>
+    <Button type="button" variant="secondary" size="sm" onClick={handleArchive} disabled={loading}>
+      <Archive className="h-3.5 w-3.5" />
+      {loading ? "Archiving" : "Archive"}
+    </Button>
   );
 }

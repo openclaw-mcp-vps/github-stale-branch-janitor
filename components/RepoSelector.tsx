@@ -1,70 +1,75 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import type { RepoSummary } from "@/lib/github";
 
-type RepoSelectorProps = {
-  repos: RepoSummary[];
-  selectedRepo: string;
-  onChange: (repoFullName: string) => void;
-  onRefresh: () => void;
-  isRefreshing: boolean;
+type Repo = {
+  id: number;
+  fullName: string;
+  updatedAt: string;
 };
 
-export function RepoSelector({ repos, selectedRepo, onChange, onRefresh, isRefreshing }: RepoSelectorProps) {
-  const [search, setSearch] = useState("");
+type RepoSelectorProps = {
+  repos: Repo[];
+  selectedRepo: string;
+  onSelectRepo: (repo: string) => void;
+  thresholdDays: number;
+  onThresholdDaysChange: (days: number) => void;
+  scanning: boolean;
+  onScan: () => void;
+};
 
-  const filteredRepos = useMemo(() => {
-    if (!search.trim()) return repos;
-    const term = search.toLowerCase();
-    return repos.filter((repo) => repo.fullName.toLowerCase().includes(term));
-  }, [repos, search]);
-
+export function RepoSelector({
+  repos,
+  selectedRepo,
+  onSelectRepo,
+  thresholdDays,
+  onThresholdDaysChange,
+  scanning,
+  onScan,
+}: RepoSelectorProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Repository Scope</CardTitle>
-        <CardDescription>Choose the repository to scan for stale branches.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="repo-search">Search repos</Label>
-          <Input
-            id="repo-search"
-            placeholder="owner/repo"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </div>
+    <section className="surface rounded-2xl p-5 md:p-6">
+      <h2 className="text-xl font-semibold text-[#f0f6fc]">Scan Repository</h2>
+      <p className="mt-2 text-sm text-[#8b949e]">
+        Choose a repository and staleness threshold to find old branches that are safe to archive.
+      </p>
 
-        <div className="grid gap-2">
-          <Label htmlFor="repo-select">Repository</Label>
+      <div className="mt-5 grid gap-4 md:grid-cols-[1fr_160px_auto] md:items-end">
+        <label className="space-y-2 text-sm">
+          <span className="mono text-xs uppercase tracking-[0.12em] text-[#8b949e]">Repository</span>
           <select
-            id="repo-select"
-            className="h-10 rounded-xl border border-[#30363d] bg-[#0d1117] px-3 text-sm text-[#c9d1d9] focus:border-[#2f81f7] focus:outline-none"
             value={selectedRepo}
-            onChange={(event) => onChange(event.target.value)}
+            onChange={(event) => onSelectRepo(event.target.value)}
+            className="w-full rounded-lg border border-[#30363d] bg-[#0d1117] px-3 py-2 text-[#e6edf3] outline-none focus:border-[#58a6ff]"
           >
-            <option value="">Select a repository</option>
-            {filteredRepos.map((repo) => (
+            {repos.length === 0 ? <option value="">No repositories available</option> : null}
+            {repos.map((repo) => (
               <option key={repo.id} value={repo.fullName}>
                 {repo.fullName}
               </option>
             ))}
           </select>
-        </div>
+        </label>
 
-        <Button type="button" variant="outline" onClick={onRefresh} disabled={isRefreshing}>
-          <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-          {isRefreshing ? "Refreshing..." : "Refresh Repositories"}
+        <label className="space-y-2 text-sm">
+          <span className="mono text-xs uppercase tracking-[0.12em] text-[#8b949e]">Stale After (Days)</span>
+          <input
+            type="number"
+            min={1}
+            max={3650}
+            value={thresholdDays}
+            onChange={(event) => onThresholdDaysChange(Number(event.target.value))}
+            className="w-full rounded-lg border border-[#30363d] bg-[#0d1117] px-3 py-2 text-[#e6edf3] outline-none focus:border-[#58a6ff]"
+          />
+        </label>
+
+        <Button type="button" onClick={onScan} disabled={!selectedRepo || scanning}>
+          <RefreshCw className={`h-4 w-4 ${scanning ? "animate-spin" : ""}`} />
+          {scanning ? "Scanning" : "Find Stale Branches"}
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

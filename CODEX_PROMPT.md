@@ -11,7 +11,7 @@ NICHE: dev-tools
 PRICE: $$9/mo/mo
 
 ARCHITECTURE SPEC:
-Next.js app with GitHub OAuth integration that scans repositories for stale branches using GitHub API. Backend cron jobs check branch staleness and send cleanup recommendations via dashboard with one-click archive actions.
+Next.js app with GitHub OAuth integration that scans repositories for stale branches using GitHub API. Features dashboard for viewing/archiving branches, automated cleanup scheduling, and Lemon Squeezy subscription management.
 
 PLANNED FILES:
 - app/page.tsx
@@ -22,14 +22,14 @@ PLANNED FILES:
 - app/api/branches/archive/route.ts
 - app/api/webhooks/lemonsqueezy/route.ts
 - lib/github.ts
-- lib/database.ts
 - lib/lemonsqueezy.ts
+- lib/db.ts
 - components/RepoSelector.tsx
 - components/StaleBranchList.tsx
 - components/ArchiveButton.tsx
 - prisma/schema.prisma
 
-DEPENDENCIES: next, tailwindcss, prisma, @prisma/client, next-auth, @octokit/rest, @lemonsqueezy/lemonsqueezy.js, date-fns, lucide-react, recharts
+DEPENDENCIES: next, tailwindcss, @auth/nextjs, @octokit/rest, @lemonsqueezy/lemonsqueezy.js, prisma, @prisma/client, zod, lucide-react, date-fns
 
 REQUIREMENTS:
 - Next.js 15 with App Router (app/ directory)

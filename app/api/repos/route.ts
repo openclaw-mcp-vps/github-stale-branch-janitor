@@ -1,32 +1,40 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { getAuthSession } from "@/lib/auth";
-import { fetchUserRepositories } from "@/lib/github";
-import { hasPaidAccess } from "@/lib/paywall";
-
-export const runtime = "nodejs";
+import { listSchedulesForLogin } from "@/lib/db";
+import { getGitHubTokenFromCookies, getViewer, listRepositories } from "@/lib/github";
+import { getAccessSession } from "@/lib/paywall";
 
 export async function GET() {
-  const session = await getAuthSession();
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const access = await getAccessSession();
+  if (!access) {
+    return NextResponse.json({ error: "Paid access required" }, { status: 402 });
   }
 
-  const cookieStore = await cookies();
-  if (!hasPaidAccess(cookieStore)) {
-    return NextResponse.json({ error: "Payment required" }, { status: 402 });
+  const token = await getGitHubTokenFromCookies();
+  if (!token) {
+    return NextResponse.json(
+      {
+        connected: false,
+        repos: [],
+        message: "Connect GitHub to start scanning repositories.",
+      },
+      { status: 200 },
+    );
   }
 
   try {
-    const repos = await fetchUserRepositories(session.accessToken);
-    return NextResponse.json({ repos });
+    const [viewer, repos] = await Promise.all([getViewer(token), listRepositories(token)]);
+    const schedules = await listSchedulesForLogin(viewer.login);
+
+    return NextResponse.json({
+      connected: true,
+      viewer,
+      repos,
+      schedules,
+      access,
+    });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to load repositories"
-      },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Unable to load repositories";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

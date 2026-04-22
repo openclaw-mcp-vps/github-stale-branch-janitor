@@ -1,210 +1,327 @@
-import { Octokit } from "@octokit/rest";
-import { differenceInDays } from "date-fns";
+import { randomBytes } from "node:crypto";
 
-export type RepoSummary = {
+import { differenceInDays } from "date-fns";
+import { cookies } from "next/headers";
+import { Octokit } from "@octokit/rest";
+
+export const GITHUB_TOKEN_COOKIE = "github_access_token";
+export const GITHUB_STATE_COOKIE = "github_oauth_state";
+
+export type GitHubViewer = {
+  login: string;
+  id: number;
+  avatarUrl: string;
+  profileUrl: string;
+};
+
+export type RepositorySummary = {
   id: number;
   fullName: string;
-  name: string;
-  owner: string;
   private: boolean;
   defaultBranch: string;
-  pushedAt: string | null;
-  htmlUrl: string;
+  updatedAt: string;
 };
 
 export type StaleBranch = {
   name: string;
   sha: string;
-  lastCommitDate: string;
-  lastCommitAuthor: string;
-  lastCommitAuthorLogin: string | null;
-  daysStale: number;
-  htmlUrl: string;
+  branchUrl: string;
+  commitDate: string;
+  commitAuthor: string;
+  commitMessage: string;
+  daysSinceCommit: number;
+  protected: boolean;
 };
 
-function parseRepoFullName(repoFullName: string) {
-  const [owner, repo] = repoFullName.split("/");
-  if (!owner || !repo) {
-    throw new Error("Repository must be in owner/name format.");
+export type ArchiveBranchResult = {
+  branch: string;
+  status: "archived" | "skipped" | "failed";
+  detail: string;
+  archivedAs?: string;
+};
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
+function createOctokit(token: string): Octokit {
+  return new Octokit({ auth: token });
+}
+
+export function parseRepositoryFullName(fullName: string): { owner: string; repo: string } {
+  const trimmed = fullName.trim();
+  const match = /^([^/]+)\/([^/]+)$/.exec(trimmed);
+  if (!match) {
+    throw new Error("Repository must be in owner/repo format");
   }
 
-  return { owner, repo };
+  return {
+    owner: match[1],
+    repo: match[2],
+  };
 }
 
-export function createGithubClient(accessToken: string) {
-  return new Octokit({
-    auth: accessToken
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const output = new Array<R>(items.length);
+  let cursor = 0;
+
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      const currentIndex = cursor;
+      cursor += 1;
+
+      if (currentIndex >= items.length) {
+        return;
+      }
+
+      output[currentIndex] = await mapper(items[currentIndex]);
+    }
   });
+
+  await Promise.all(workers);
+  return output;
 }
 
-export async function fetchUserRepositories(accessToken: string): Promise<RepoSummary[]> {
-  const octokit = createGithubClient(accessToken);
+export function createOAuthState(): string {
+  return randomBytes(24).toString("hex");
+}
+
+export function getGitHubAuthUrl(state: string): string {
+  const clientId = requireEnv("GITHUB_CLIENT_ID");
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const redirectUri = `${appUrl.replace(/\/$/, "")}/api/auth/github/callback`;
+
+  const url = new URL("https://github.com/login/oauth/authorize");
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("scope", "repo read:user");
+  url.searchParams.set("state", state);
+  return url.toString();
+}
+
+export async function exchangeCodeForAccessToken(code: string): Promise<string> {
+  const clientId = requireEnv("GITHUB_CLIENT_ID");
+  const clientSecret = requireEnv("GITHUB_CLIENT_SECRET");
+
+  const response = await fetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub OAuth exchange failed (${response.status})`);
+  }
+
+  const json = (await response.json()) as { access_token?: string; error_description?: string };
+  if (!json.access_token) {
+    throw new Error(json.error_description ?? "GitHub OAuth did not return an access token");
+  }
+
+  return json.access_token;
+}
+
+export async function getViewer(token: string): Promise<GitHubViewer> {
+  const octokit = createOctokit(token);
+  const { data } = await octokit.users.getAuthenticated();
+
+  return {
+    login: data.login,
+    id: data.id,
+    avatarUrl: data.avatar_url,
+    profileUrl: data.html_url,
+  };
+}
+
+export async function getGitHubTokenFromCookies(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get(GITHUB_TOKEN_COOKIE)?.value ?? null;
+}
+
+export async function listRepositories(token: string): Promise<RepositorySummary[]> {
+  const octokit = createOctokit(token);
 
   const repos = await octokit.paginate(octokit.repos.listForAuthenticatedUser, {
-    per_page: 100,
+    affiliation: "owner,collaborator,organization_member",
     sort: "updated",
-    affiliation: "owner,collaborator,organization_member"
+    per_page: 100,
   });
 
-  return repos.map((repo) => ({
-    id: repo.id,
-    fullName: repo.full_name,
-    name: repo.name,
-    owner: repo.owner.login,
-    private: repo.private,
-    defaultBranch: repo.default_branch,
-    pushedAt: repo.pushed_at,
-    htmlUrl: repo.html_url
-  }));
+  return repos
+    .filter((repo) => !repo.archived && !repo.disabled)
+    .map((repo) => ({
+      id: repo.id,
+      fullName: repo.full_name,
+      private: repo.private,
+      defaultBranch: repo.default_branch,
+      updatedAt: repo.updated_at ?? repo.created_at ?? new Date(0).toISOString(),
+    }))
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
-async function mapBranchesWithCommitMetadata(input: {
-  octokit: Octokit;
-  owner: string;
-  repo: string;
-  branchNames: { name: string; sha: string }[];
-}) {
-  const concurrency = 6;
-  const result: StaleBranch[] = [];
+export async function findStaleBranches(
+  token: string,
+  repository: string,
+  thresholdDays: number,
+): Promise<StaleBranch[]> {
+  const { owner, repo } = parseRepositoryFullName(repository);
+  const octokit = createOctokit(token);
 
-  for (let index = 0; index < input.branchNames.length; index += concurrency) {
-    const batch = input.branchNames.slice(index, index + concurrency);
+  const [{ data: repoData }, branches] = await Promise.all([
+    octokit.repos.get({ owner, repo }),
+    octokit.paginate(octokit.repos.listBranches, {
+      owner,
+      repo,
+      per_page: 100,
+    }),
+  ]);
 
-    const mapped = await Promise.all(
-      batch.map(async (branch) => {
-        const commit = await input.octokit.repos.getCommit({
-          owner: input.owner,
-          repo: input.repo,
-          ref: branch.sha
-        });
+  const defaultBranch = repoData.default_branch;
 
-        const authoredAt =
-          commit.data.commit.author?.date ?? commit.data.commit.committer?.date ?? new Date(0).toISOString();
+  const candidateBranches = branches.filter(
+    (branch) => branch.name !== defaultBranch && !branch.name.startsWith("archive/"),
+  );
 
-        const authoredBy =
-          commit.data.author?.login ??
-          commit.data.commit.author?.name ??
-          commit.data.commit.committer?.name ??
-          "Unknown";
-
-        return {
-          name: branch.name,
-          sha: branch.sha,
-          lastCommitDate: authoredAt,
-          lastCommitAuthor: authoredBy,
-          lastCommitAuthorLogin: commit.data.author?.login ?? null,
-          daysStale: differenceInDays(new Date(), new Date(authoredAt)),
-          htmlUrl: commit.data.html_url
-        } satisfies StaleBranch;
-      })
-    );
-
-    result.push(...mapped);
+  if (candidateBranches.length === 0) {
+    return [];
   }
 
-  return result;
-}
+  const now = new Date();
 
-export async function fetchStaleBranches(input: {
-  accessToken: string;
-  repoFullName: string;
-  thresholdDays: number;
-}) {
-  const { owner, repo } = parseRepoFullName(input.repoFullName);
-  const octokit = createGithubClient(input.accessToken);
+  const branchInfo = await mapWithConcurrency(candidateBranches, 8, async (branch) => {
+    const { data: commit } = await octokit.repos.getCommit({
+      owner,
+      repo,
+      ref: branch.commit.sha,
+    });
 
-  const repoResponse = await octokit.repos.get({ owner, repo });
-  const defaultBranch = repoResponse.data.default_branch;
+    const commitDateRaw = commit.commit.committer?.date ?? commit.commit.author?.date;
+    const commitDate = commitDateRaw ? new Date(commitDateRaw) : new Date(0);
+    const daysSinceCommit = differenceInDays(now, commitDate);
 
-  const branches = await octokit.paginate(octokit.repos.listBranches, {
-    owner,
-    repo,
-    per_page: 100
-  });
-
-  const candidates = branches
-    .filter((branch) => branch.name !== defaultBranch)
-    .filter((branch) => !branch.name.startsWith("archive/"))
-    .map((branch) => ({
+    return {
       name: branch.name,
-      sha: branch.commit.sha
-    }));
-
-  const enriched = await mapBranchesWithCommitMetadata({
-    octokit,
-    owner,
-    repo,
-    branchNames: candidates
+      sha: branch.commit.sha,
+      branchUrl: `https://github.com/${owner}/${repo}/tree/${encodeURIComponent(branch.name)}`,
+      commitDate: commitDate.toISOString(),
+      commitAuthor:
+        commit.commit.author?.name ??
+        commit.author?.login ??
+        commit.commit.committer?.name ??
+        "Unknown",
+      commitMessage: commit.commit.message.split("\n")[0] ?? "No commit message",
+      daysSinceCommit,
+      protected: branch.protected,
+    } satisfies StaleBranch;
   });
 
-  return enriched
-    .filter((branch) => branch.daysStale >= input.thresholdDays)
-    .sort((a, b) => b.daysStale - a.daysStale);
+  return branchInfo
+    .filter((branch) => branch.daysSinceCommit >= thresholdDays)
+    .sort((left, right) => right.daysSinceCommit - left.daysSinceCommit);
 }
 
-function sanitizeArchiveName(branchName: string) {
-  return branchName.replace(/[^a-zA-Z0-9/_-]/g, "-");
+async function resolveArchiveRefName(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<string> {
+  const baseRef = `heads/archive/${branch}`;
+
+  try {
+    await octokit.git.getRef({ owner, repo, ref: baseRef });
+    return `${baseRef}-${Date.now()}`;
+  } catch {
+    return baseRef;
+  }
 }
 
-export async function archiveBranch(input: {
-  accessToken: string;
-  repoFullName: string;
-  branchName: string;
-}) {
-  const { owner, repo } = parseRepoFullName(input.repoFullName);
-  const octokit = createGithubClient(input.accessToken);
+export async function archiveBranches(
+  token: string,
+  repository: string,
+  branches: string[],
+): Promise<ArchiveBranchResult[]> {
+  const { owner, repo } = parseRepositoryFullName(repository);
+  const octokit = createOctokit(token);
 
-  const repoResponse = await octokit.repos.get({ owner, repo });
-  const defaultBranch = repoResponse.data.default_branch;
+  const { data: repoData } = await octokit.repos.get({ owner, repo });
+  const defaultBranch = repoData.default_branch;
 
-  if (input.branchName === defaultBranch) {
-    throw new Error("Default branch cannot be archived.");
-  }
+  const results: ArchiveBranchResult[] = [];
 
-  if (input.branchName.startsWith("archive/")) {
-    throw new Error("Branch is already archived.");
-  }
+  for (const branch of branches) {
+    if (branch === defaultBranch) {
+      results.push({
+        branch,
+        status: "skipped",
+        detail: "Default branch cannot be archived",
+      });
+      continue;
+    }
 
-  const originalRef = `heads/${input.branchName}`;
-  const currentRef = await octokit.git.getRef({
-    owner,
-    repo,
-    ref: originalRef
-  });
+    if (branch.startsWith("archive/")) {
+      results.push({
+        branch,
+        status: "skipped",
+        detail: "Branch is already in archive namespace",
+      });
+      continue;
+    }
 
-  const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const archiveBase = `archive/${sanitizeArchiveName(input.branchName)}-${dateTag}`;
-
-  let archiveRef = `refs/heads/${archiveBase}`;
-  let suffix = 1;
-
-  while (true) {
     try {
+      const { data: branchData } = await octokit.repos.getBranch({ owner, repo, branch });
+
+      if (branchData.protected) {
+        results.push({
+          branch,
+          status: "skipped",
+          detail: "Protected branch cannot be archived",
+        });
+        continue;
+      }
+
+      const { data: refData } = await octokit.git.getRef({ owner, repo, ref: `heads/${branch}` });
+      const archiveRef = await resolveArchiveRefName(octokit, owner, repo, branch);
+
       await octokit.git.createRef({
         owner,
         repo,
-        ref: archiveRef,
-        sha: currentRef.data.object.sha
+        ref: `refs/${archiveRef}`,
+        sha: refData.object.sha,
       });
-      break;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      if (!message.includes("Reference already exists")) {
-        throw error;
-      }
 
-      suffix += 1;
-      archiveRef = `refs/heads/${archiveBase}-${suffix}`;
+      await octokit.git.deleteRef({ owner, repo, ref: `heads/${branch}` });
+
+      results.push({
+        branch,
+        status: "archived",
+        detail: "Archived successfully",
+        archivedAs: archiveRef.replace(/^heads\//, ""),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown GitHub error";
+      results.push({
+        branch,
+        status: "failed",
+        detail: message,
+      });
     }
   }
 
-  await octokit.git.deleteRef({
-    owner,
-    repo,
-    ref: originalRef
-  });
-
-  return {
-    archivedBranch: archiveRef.replace("refs/heads/", "")
-  };
+  return results;
 }

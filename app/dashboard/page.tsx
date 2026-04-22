@@ -1,71 +1,54 @@
-import { cookies } from "next/headers";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { LockKeyhole } from "lucide-react";
 
-import { DashboardClient } from "@/components/DashboardClient";
-import { UnlockAccessForm } from "@/components/UnlockAccessForm";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAuthSession } from "@/lib/auth";
-import { hasPaidAccess } from "@/lib/paywall";
+import { DashboardApp } from "@/components/DashboardApp";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getAccessSession } from "@/lib/paywall";
 
-const checkoutLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK;
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const session = await getAuthSession();
+  const access = await getAccessSession();
 
-  if (!session) {
-    redirect("/api/auth/github");
-  }
+  if (!access) {
+    const paymentLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ?? "";
 
-  const cookieStore = await cookies();
-  const paidAccess = hasPaidAccess(cookieStore);
-
-  return (
-    <main className="mx-auto w-full max-w-6xl space-y-8 px-6 pb-16 pt-10 md:px-10">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold text-white">Stale Branch Dashboard</h1>
-          <p className="text-sm text-[#8b949e]">Scan repositories, schedule recurring cleanup, and archive dead refs safely.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge className={paidAccess ? "bg-[#13233b] text-[#79c0ff]" : "bg-[#3a1515] text-[#ffa198]"}>
-            {paidAccess ? "Paid access active" : "Paywall locked"}
-          </Badge>
-          <Link
-            href="/api/auth/signout"
-            className="inline-flex h-10 items-center rounded-xl border border-[#30363d] px-4 text-sm text-[#c9d1d9] hover:bg-[#161b22]"
-          >
-            Sign out
-          </Link>
-        </div>
-      </header>
-
-      {paidAccess ? (
-        <DashboardClient userEmail={session.user?.email ?? ""} />
-      ) : (
-        <Card className="max-w-2xl">
+    return (
+      <main className="mx-auto max-w-3xl px-6 py-16">
+        <Card className="text-center">
           <CardHeader>
-            <CardTitle>Unlock Dashboard Access</CardTitle>
-            <CardDescription>
-              Complete checkout, then confirm the same email used at payment. Access is stored as a secure cookie on this browser.
-            </CardDescription>
+            <LockKeyhole className="mx-auto h-10 w-10 text-[#58a6ff]" />
+            <CardTitle className="mt-5 text-3xl">Dashboard is behind the paywall</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
-            {checkoutLink ? (
-              <a href={checkoutLink} className="inline-flex h-11 items-center rounded-xl bg-[#2f81f7] px-6 font-medium text-white hover:bg-[#1f6feb]">
-                Open Stripe Checkout
+          <CardContent>
+            <p className="text-sm leading-relaxed text-[#8b949e]">
+              This feature is available to paid subscribers. Complete checkout, then claim access with your purchase email.
+            </p>
+            <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <a
+                href={paymentLink}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center rounded-xl bg-[#238636] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#2ea043]"
+              >
+                Buy on Stripe for $9/mo
               </a>
-            ) : (
-              <p className="rounded-xl border border-[#3d1f1f] bg-[#2b1414] p-3 text-sm text-[#ffa198]">
-                Missing NEXT_PUBLIC_STRIPE_PAYMENT_LINK. Set it to your hosted Stripe Payment Link.
-              </p>
-            )}
-
-            <UnlockAccessForm defaultEmail={session.user?.email ?? ""} />
+              <Link
+                href="/purchase/success"
+                className="inline-flex items-center justify-center rounded-xl border border-[#30363d] bg-[#161b22] px-5 py-2.5 text-sm font-semibold text-[#c9d1d9] transition hover:border-[#58a6ff]"
+              >
+                I already purchased
+              </Link>
+            </div>
           </CardContent>
         </Card>
-      )}
+      </main>
+    );
+  }
+
+  return (
+    <main className="mx-auto w-full max-w-6xl px-6 py-10 md:px-10">
+      <DashboardApp accessEmail={access.email} />
     </main>
   );
 }
